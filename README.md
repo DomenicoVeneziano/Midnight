@@ -55,7 +55,9 @@ git clone https://github.com/DomenicoVeneziano/Midnight.git ; cd Midnight; sudo 
 
 <h2>Usage</h2>
 
-**Midnight** can be used either with a **single domain** or with a **list** of **targets** recursively
+**Midnight** can be used either with a **single domain** or with a **list** of **targets** recursively.
+
+Before running Midnight make sure that **notify is configured correctly** as it is intended to send an alert **as soon as a vulnerability is uncovered** and not to produce a standard output for later review. 
 
 ```bash
 ./midnight -d [target domain]
