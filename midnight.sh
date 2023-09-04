@@ -75,17 +75,11 @@ katana -d 10 -list 200subs.txt -jc -aff -fs rdn -o 200crawl.txt
 
 cat 200crawl.txt >> archive_links
 
-echo "[+] Running waybackurls"
-
-cat subdomains.txt | waybackurls >> archive_links
-
 echo "[+] Running gau"
 
 cat subdomains.txt | gau >> archive_links
 
-echo "[+] Running paramspider"
-
-paramspider -l subdomains.txt ; cd results ; cat * >> archive_links ; cd .. ; rm -rf results
+echo "[+] Organising assets and removing duplicates"
 
 sort -u archive_links | uro | tee -a final_links
 
